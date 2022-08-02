@@ -27,11 +27,8 @@ class SecurityReviewValidator:
                 if 'reviews/README.md' in filename:
                     continue   # Ignore this one
                 (_results, _warn_results) = self.validate_file(filename)
-                for result in _results:
-                    results.append(f"{filename}: {result}")
-                for result in _warn_results:
-                    warn_results.append(f"{filename}: {result}")
-
+                results.extend(f"{filename}: {result}" for result in _results)
+                warn_results.extend(f"{filename}: {result}" for result in _warn_results)
         return (results, warn_results)
 
     def validate_file(self, filename: str) -> List[str]:
@@ -60,12 +57,12 @@ class SecurityReviewValidator:
             censored_lines = profanity.censor(content).splitlines()
             content_lines = content.splitlines()
             if len(censored_lines) != len(content_lines):
-                self.warn_results.append("Contains profanity.")    
+                self.warn_results.append("Contains profanity.")
             else:
-                for idx in range(0, len(content_lines)):
-                    if content_lines[idx] != censored_lines[idx]:
-                        if content_lines[idx].startswith('- "pkg:'):
-                            continue
+                for idx in range(len(content_lines)):
+                    if content_lines[idx] != censored_lines[
+                        idx
+                    ] and not content_lines[idx].startswith('- "pkg:'):
                         self.warn_results.append(f"Contains profanity in line #{idx}: [{censored_lines[idx]}]")
         return
 
@@ -88,7 +85,7 @@ class SecurityReviewValidator:
                 break
             elif section == 1:
                 metadata_content.append(line)
-        
+
         metadata = yaml.safe_load('\n'.join(metadata_content))
 
         if 'Package-URLs' not in metadata or not len(metadata['Package-URLs']):
@@ -101,9 +98,8 @@ class SecurityReviewValidator:
             self.results.append("Invalid access, must be either 'Public' or 'Private/<name>'")
 
         # For GitHub
-        if IS_PUBLIC_REPOSITORY:
-            if access.startswith("Private/"):
-                self.results.append("Invalid access, all reviews must be Public.")
+        if IS_PUBLIC_REPOSITORY and access.startswith("Private/"):
+            self.results.append("Invalid access, all reviews must be Public.")
 
         for reviewer in metadata.get('Reviewers'):
             for key, value in reviewer.items():
@@ -111,12 +107,12 @@ class SecurityReviewValidator:
                     self.results.append(f"Unexpected reviewer property ({key}).")
                 #if not isinstance(value, str):
                 #    self.results.append(f"Unexpected reviewer value ({value}), string expected.")
-        
+
         if 'Domain' not in metadata:
             self.results.append("Missing domain.")
         if metadata['Domain'] != 'Security':
             self.results.append("Invalid domain.")
-        
+
         methodology_parts = metadata.get('Methodology')
         if not methodology_parts or not isinstance(methodology_parts, list):
             self.results.append("Missing Methodology.")
@@ -156,10 +152,10 @@ class SecurityReviewValidator:
             self.results.append("Missing Schema-Version.")
         if str(schema_version) != "1.0":
             self.results.append("Invalid Schema-Version.")
-        
+
         spdx = metadata.get("SPDX-License-Identifier")
         if not spdx or spdx not in ["CC-BY-4.0"]:
-            self.results.append(f"SPDX-License-Identifier is not CC-BY-4.0")
+            self.results.append("SPDX-License-Identifier is not CC-BY-4.0")
 
 if __name__ == '__main__':
     validator = SecurityReviewValidator()
@@ -171,17 +167,17 @@ if __name__ == '__main__':
             (results, warn_results) = validator.validate_file(path)
     else:
         (results, warn_results) = validator.validate_path('reviews')
-    
+
     errcode = 0
     if results:
         for result in results:
             print(f'Error: {result}', flush=True)
         errcode = 1
-    
+
     if warn_results:
         for result in warn_results:
             print(f' Warn: {result}', flush=True)
-    
+
     if not results and not warn_results:
         print("OK", flush=True)
     sys.exit(errcode)
